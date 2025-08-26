@@ -5,10 +5,11 @@ import (
 	"os"
 	"sort"
 
-	"github.com/your-username/cdn-speed-test/internal/config"
-	"github.com/your-username/cdn-speed-test/internal/ip_source"
-	"github.com/your-username/cdn-speed-test/internal/output"
-	"github.com/your-username/cdn-speed-test/internal/tester"
+	"github.com/callacat/cdn-speed-test/internal/config"
+	"github.com/callacat/cdn-speed-test/internal/ip_source"
+	"github.com/callacat/cdn-speed-test/internal/output"
+	"github.com/callacat/cdn-speed-test/internal/tester"
+	"github.com/schollz/progressbar/v3"
 )
 
 func main() {
@@ -32,7 +33,9 @@ func main() {
 
 	// 3. 阶段一：TCP延迟测试
 	fmt.Println("\n--- 阶段一：TCP延迟和丢包率测试 ---")
-	initialResults := tester.RunTCPPingTests(ips, cfg.Test.Concurrency, cfg.Test.Retries, cfg.Test.Timeout, cfg.Test.LatencyMax)
+	bar1 := progressbar.Default(int64(len(ips)), "TCP Pinging")
+	initialResults := tester.RunTCPPingTests(ips, cfg.Test.Concurrency, cfg.Test.Retries, cfg.Test.Timeout, cfg.Test.LatencyMax, bar1)
+	bar1.Finish() // 确保进度条完成
 	fmt.Printf("✅ %d 个IP通过初步筛选\n", len(initialResults))
 
 	// 4. 排序并选取TopN
@@ -52,7 +55,9 @@ func main() {
 
 	// 5. 阶段二：HTTP可用性和速度测试
 	fmt.Println("\n--- 阶段二：HTTP可用性和速度测试 ---")
-	tester.RunHTTPTests(topIPs, cfg.Test.Concurrency, cfg.HTTP.TargetURL, cfg.HTTP.SpeedTestURL, cfg.Test.Timeout, cfg.HTTP.SpeedTestTimeout)
+	bar2 := progressbar.Default(int64(len(topIPs)), "HTTP Testing")
+	tester.RunHTTPTests(topIPs, cfg.Test.Concurrency, cfg.HTTP.TargetURL, cfg.HTTP.SpeedTestURL, cfg.Test.Timeout, cfg.HTTP.SpeedTestTimeout, bar2)
+	bar2.Finish() // 确保进度条完成
 	fmt.Println("✅ HTTP测试完成")
 
 

@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/your-username/cdn-speed-test/internal/models"
+	"github.com/callacat/cdn-speed-test/internal/models"
 )
 
 // PingResult 包含单次ping的结果

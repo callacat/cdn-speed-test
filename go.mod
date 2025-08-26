@@ -1,4 +1,4 @@
-module github.com/your-username/cdn-speed-test
+module github.com/callacat/cdn-speed-test
 
 go 1.25
 

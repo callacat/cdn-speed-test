@@ -7,7 +7,7 @@ import (
 	"strconv"
 
 	"github.com/olekukonko/tablewriter"
-	"github.com/your-username/cdn-speed-test/internal/models"
+	"github.com/callacat/cdn-speed-test/internal/models"
 )
 
 // RenderResults 将结果渲染到终端或CSV文件

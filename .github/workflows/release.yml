@@ -17,6 +17,7 @@ jobs:
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
+      # 确保我们输出 PR 号，即使没有创建新的 release
       pull_request_number: ${{ steps.release.outputs.pull_request_number }}
 
     steps:
@@ -27,19 +28,23 @@ jobs:
         with:
           release-type: go
 
-      # 步骤 2: 使用 gh CLI 自动合并 PR (更可靠的方式)
-      - name: Enable auto-merge for the release PR
+      # 步骤 2: 使用 gh CLI 自动合并 PR
+      # 只要 release-please 创建或找到了一个 PR，就尝试合并它
+      - name: Merge the release PR
         if: ${{ steps.release.outputs.pull_request_number }}
-        run: gh pr merge --auto --squash "${{ steps.release.outputs.pull_request_number }}"
+        run: |
+          gh pr review --approve ${{ steps.release.outputs.pull_request_number }}
+          gh pr merge --squash ${{ steps.release.outputs.pull_request_number }}
         env:
+          # GITHUB_TOKEN 是由 GitHub Actions 自动提供的
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Delete workflow runs
         uses: Mattraks/delete-workflow-runs@v2
         with:
             retain_days: 0
-            keep_minimum_runs: 2
-
+            keep_minimum_runs: 2  
+        
   build-and-publish:
     # 仅当 release-please 作业成功创建了一个新版本时才运行
     needs: release-please

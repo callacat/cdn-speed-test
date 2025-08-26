@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/your-username/cdn-speed-test/internal/models"
+	"github.com/callacat/cdn-speed-test/internal/models"
 )
 
 // CheckConnectivityAndSpeed 对单个IP进行HTTP连通性和速度测试

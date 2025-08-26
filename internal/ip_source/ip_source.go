@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/your-username/cdn-speed-test/internal/config"
+	"github.com/callacat/cdn-speed-test/internal/config"
 )
 
 // GetIPs 根据配置获取IP地址列表
