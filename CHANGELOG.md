@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.5](https://github.com/callacat/cdn-speed-test/compare/v1.0.4...v1.0.5) (2025-08-26)
+
+
+### Bug Fixes
+
+* fix ([f9a49b4](https://github.com/callacat/cdn-speed-test/commit/f9a49b4440ffd4e2248d9d7750378c18998585f2))
+* fix ([aa46e13](https://github.com/callacat/cdn-speed-test/commit/aa46e13c8acedd02241537d99c2050cfc70116ec))
+
 ## [1.0.4](https://github.com/callacat/cdn-speed-test/compare/v1.0.3...v1.0.4) (2025-08-26)
 
 
