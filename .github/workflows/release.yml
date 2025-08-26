@@ -27,14 +27,12 @@ jobs:
         with:
           release-type: go
 
-      # 步骤 2: 自动合并由 release-please 创建的 PR
-      - name: Auto-merge the release PR
+      # 步骤 2: 使用 gh CLI 自动合并 PR (更可靠的方式)
+      - name: Enable auto-merge for the release PR
         if: ${{ steps.release.outputs.pull_request_number }}
-        uses: pascalgn/automerge-action@v0.15.6
+        run: gh pr merge --auto --squash "${{ steps.release.outputs.pull_request_number }}"
         env:
-          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-          MERGE_METHOD: "squash" # 使用 squash 方式合并，保持提交历史整洁
-          PULL_REQUEST: "${{ steps.release.outputs.pull_request_number }}"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Delete workflow runs
         uses: Mattraks/delete-workflow-runs@v2
@@ -60,7 +58,7 @@ jobs:
         with:
           go-version: '1.21'
 
-      # 新增步骤: 运行 go mod tidy 来确保 go.sum 文件存在且是最新
+      # 运行 go mod tidy 来确保 go.sum 文件存在且是最新
       - name: Tidy Go Modules
         run: go mod tidy
 
