@@ -1,6 +1,6 @@
 module github.com/callacat/cdn-speed-test
 
-go 1.25
+go 1.22
 
 require (
 	github.com/olekukonko/tablewriter v0.0.5

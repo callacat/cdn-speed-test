@@ -3,17 +3,11 @@ name: Automatic Release and Publish
 on:
   push:
     branches:
-      - 'main' # Trigger on push to the main branch
+      - 'main'
 
-# Grant permissions for creating PRs and Releases
-# permissions:
-#   contents: write
-#   pull-requests: write
-#   actions: write
-
-# .github/workflows/release.yml
-
-# ... (前面的内容保持不变)
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
   release-please:
@@ -22,43 +16,32 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
       pull_request_number: ${{ steps.release.outputs.pull_request_number }}
-
     steps:
-      # Step 1: Generate the Release PR.
-      # [FIX] Use the Personal Access Token (PAT) for authentication
       - name: Generate Release PR and Version
         id: release
         uses: googleapis/release-please-action@v4
         with:
-          token: ${{ secrets.RELEASE_PLEASE_PAT }} # <-- 修改这里
+          # Using a PAT is more reliable for permissions.
+          # Ensure you have a secret named RELEASE_PLEASE_PAT in your repo settings.
+          token: ${{ secrets.RELEASE_PLEASE_PAT }}
           release-type: go
 
-      # Step 2: Use a dedicated action to auto-merge the PR.
-      # [FIX] Also use the PAT here to ensure merge permissions
       - name: Merge the release PR
         if: ${{ steps.release.outputs.pull_request_number }}
         uses: pascalgn/automerge-action@v0.15.6
         env:
-          GITHUB_TOKEN: "${{ secrets.RELEASE_PLEASE_PAT }}" # <-- 同时修改这里
+          GITHUB_TOKEN: "${{ secrets.RELEASE_PLEASE_PAT }}"
           MERGE_METHOD: "squash"
           PULL_REQUEST: "${{ steps.release.outputs.pull_request_number }}"
           MERGE_LABELS: ""
 
-# ... (后面的内容保持不变)
-      - name: Delete workflow runs
-        uses: Mattraks/delete-workflow-runs@v2
-        with:
-            retain_days: 0
-            keep_minimum_runs: 2
-
   build-and-publish:
-    # Only run if the release-please job created a new release
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Needed to upload assets to the Release
-      packages: write # Needed to push to Docker Hub
+      contents: write
+      packages: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -66,9 +49,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.22' # Match the go.mod version
 
-      # Run go mod tidy to ensure go.sum is up to date
       - name: Tidy Go Modules
         run: go mod tidy
 
@@ -89,7 +71,6 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ secrets.DOCKERHUB_USERNAME }}/cdn-speed-test
-          # This action automatically uses the git tag from release-please
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -106,7 +87,7 @@ jobs:
 
       - name: Build binaries for different platforms
         run: |
-          mkdir -p release # Create directory for binaries
+          mkdir -p release
           GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o release/cdn-speed-test-linux-amd64 ./cmd/cdn-speed-test
           GOOS=windows GOARCH=amd64 go build -ldflags="-w -s" -o release/cdn-speed-test-windows-amd64.exe ./cmd/cdn-speed-test
           GOOS=darwin GOARCH=amd64 go build -ldflags="-w -s" -o release/cdn-speed-test-darwin-amd64 ./cmd/cdn-speed-test
@@ -115,6 +96,5 @@ jobs:
       - name: Upload Assets to Release
         uses: softprops/action-gh-release@v2
         with:
-          # Use the tag_name from the release-please job to find the correct release
           tag_name: ${{ needs.release-please.outputs.tag_name }}
           files: release/*

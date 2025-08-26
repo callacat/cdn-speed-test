@@ -7,7 +7,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config 定义了应用的配置结构
+// Config defines the application's configuration structure.
 type Config struct {
 	Test struct {
 		Concurrency int           `yaml:"concurrency"`
@@ -33,9 +33,9 @@ type Config struct {
 	} `yaml:"output"`
 }
 
-// LoadConfig 从指定路径加载配置文件
-func LoadConfig(path string) (*Config, error) {
-	// 设置默认值
+// Load loads the configuration from a given path, applying defaults first.
+func Load(path string) (*Config, error) {
+	// Start with default values.
 	cfg := &Config{}
 	cfg.Test.Concurrency = 1000
 	cfg.Test.Retries = 4
@@ -49,22 +49,20 @@ func LoadConfig(path string) (*Config, error) {
 	cfg.Output.Format = "table"
 	cfg.Output.CSVPath = "./result.csv"
 
-
-	// 如果文件存在则读取
-	if _, err := os.Stat(path); err == nil {
-		data, err := os.ReadFile(path)
-		if err != nil {
+	// If the config file exists, read it and override defaults.
+	data, err := os.ReadFile(path)
+	if err != nil {
+		// If the file doesn't exist, that's okay; we'll use defaults.
+		// If another error occurred, return it.
+		if !os.IsNotExist(err) {
 			return nil, err
 		}
-		err = yaml.Unmarshal(data, cfg)
-		if err != nil {
+	} else {
+		// File exists, so unmarshal it into the config struct.
+		if err := yaml.Unmarshal(data, cfg); err != nil {
 			return nil, err
 		}
-	} else if !os.IsNotExist(err) {
-        // 如果文件存在但有其他错误
-        return nil, err
-    }
-    // 如果文件不存在，则使用默认配置
+	}
 
 	return cfg, nil
 }

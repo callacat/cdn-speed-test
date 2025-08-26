@@ -1,76 +1,105 @@
-package main
+package tester
 
 import (
-	"fmt"
-	"os"
-	"sort"
+	"context"
+	"crypto/tls"
+	"io"
+	"net"
+	"net/http"
+	"sync"
+	"time"
 
-	"github.com/callacat/cdn-speed-test/internal/config"
-	"github.com/callacat/cdn-speed-test/internal/ip_source"
-	"github.com/callacat/cdn-speed-test/internal/output"
-	"github.com/callacat/cdn-speed-test/internal/tester"
+	"github.com/callacat/cdn-speed-test/internal/models"
 	"github.com/schollz/progressbar/v3"
 )
 
-func main() {
-	fmt.Println("🚀 通用 CDN 优选IP测试工具 v1.0.0")
+// testIPConnectivityAndSpeed performs HTTP availability and speed tests for a single IP.
+// It updates the passed IPInfo struct directly.
+func testIPConnectivityAndSpeed(ipInfo *models.IPInfo, targetURL, speedTestURL string, timeout, speedTestTimeout time.Duration) {
+	// Create a custom transport that forces connections to our target IP.
+	dialer := &net.Dialer{
+		Timeout:   timeout,
+		KeepAlive: 30 * time.Second,
+	}
+	transport := &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			// Override the address to use our specific IP and port 443.
+			return dialer.DialContext(ctx, network, net.JoinHostPort(ipInfo.IP.String(), "443"))
+		},
+		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true}, // Ignore self-signed certs
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
 
-	// 1. 加载配置
-	cfg, err := config.LoadConfig("config.yaml")
+	// 1. Availability Test
+	client := &http.Client{Transport: transport, Timeout: timeout}
+	req, err := http.NewRequest("HEAD", targetURL, nil)
 	if err != nil {
-		fmt.Println("❌ 加载配置失败:", err)
-		os.Exit(1)
+		ipInfo.IsAvailable = false
+		return
 	}
-	fmt.Println("✅ 配置加载成功")
 
-	// 2. 获取IP列表
-	ips, err := ip_source.GetIPs(cfg)
+	resp, err := client.Do(req)
+	if err != nil || (resp.StatusCode < 200 || resp.StatusCode >= 400) {
+		ipInfo.IsAvailable = false
+		return
+	}
+	resp.Body.Close()
+	ipInfo.IsAvailable = true
+
+	// 2. Speed Test
+	speedClient := &http.Client{Transport: transport, Timeout: speedTestTimeout}
+	req, err = http.NewRequest("GET", speedTestURL, nil)
 	if err != nil {
-		fmt.Println("❌ 获取IP列表失败:", err)
-		os.Exit(1)
+		return // Don't mark as unavailable, just failed the speed test
 	}
-	fmt.Printf("✅ 成功获取 %d 个IP地址\n", len(ips))
 
-	// 3. 阶段一：TCP延迟测试
-	fmt.Println("\n--- 阶段一：TCP延迟和丢包率测试 ---")
-	bar1 := progressbar.Default(int64(len(ips)), "TCP Pinging")
-	initialResults := tester.RunTCPPingTests(ips, cfg.Test.Concurrency, cfg.Test.Retries, cfg.Test.Timeout, cfg.Test.LatencyMax, bar1)
-	bar1.Finish() // 确保进度条完成
-	fmt.Printf("✅ %d 个IP通过初步筛选\n", len(initialResults))
-
-	// 4. 排序并选取TopN
-	sort.Slice(initialResults, func(i, j int) bool {
-		if initialResults[i].PacketLoss != initialResults[j].PacketLoss {
-			return initialResults[i].PacketLoss < initialResults[j].PacketLoss
-		}
-		return initialResults[i].Latency < initialResults[j].Latency
-	})
-
-	topN := cfg.Test.TopN
-	if len(initialResults) < topN {
-		topN = len(initialResults)
+	start := time.Now()
+	speedResp, err := speedClient.Do(req)
+	if err != nil {
+		return
 	}
-	topIPs := initialResults[:topN]
-	fmt.Printf("✅ 选取延迟最低的 %d 个IP进入下一阶段测试\n", len(topIPs))
+	defer speedResp.Body.Close()
 
-	// 5. 阶段二：HTTP可用性和速度测试
-	fmt.Println("\n--- 阶段二：HTTP可用性和速度测试 ---")
-	bar2 := progressbar.Default(int64(len(topIPs)), "HTTP Testing")
-	tester.RunHTTPTests(topIPs, cfg.Test.Concurrency, cfg.HTTP.TargetURL, cfg.HTTP.SpeedTestURL, cfg.Test.Timeout, cfg.HTTP.SpeedTestTimeout, bar2)
-	bar2.Finish() // 确保进度条完成
-	fmt.Println("✅ HTTP测试完成")
+	bytes, err := io.Copy(io.Discard, speedResp.Body)
+	if err != nil {
+		return
+	}
+	duration := time.Since(start)
 
+	if duration.Seconds() > 0 {
+		// Calculate speed in MB/s
+		ipInfo.DownloadSpeed = (float64(bytes) / 1024 / 1024) / duration.Seconds()
+	}
+}
 
-	// 6. 最终排序
-	sort.Slice(topIPs, func(i, j int) bool {
-		// 速度优先，然后是延迟
-		if topIPs[i].DownloadSpeed != topIPs[j].DownloadSpeed {
-			return topIPs[i].DownloadSpeed > topIPs[j].DownloadSpeed
-		}
-		return topIPs[i].Latency < topIPs[j].Latency
-	})
+// RunHTTPTests concurrently performs HTTP tests on a list of IPs.
+// This function modifies the IPInfo structs in the provided slice directly.
+func RunHTTPTests(ipInfos []*models.IPInfo, concurrency int, targetURL, speedTestURL string, timeout, speedTestTimeout time.Duration, bar *progressbar.ProgressBar) {
+	var wg sync.WaitGroup
+	ipChan := make(chan *models.IPInfo, len(ipInfos))
 
-	// 7. 输出结果
-	fmt.Println("\n--- 🏆 测试完成，最佳IP如下 ---")
-	output.RenderResults(topIPs, cfg.Output.Format, cfg.Output.CSVPath)
+	// Start worker goroutines
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for ipInfo := range ipChan {
+				testIPConnectivityAndSpeed(ipInfo, targetURL, speedTestURL, timeout, speedTestTimeout)
+				bar.Add(1)
+			}
+		}()
+	}
+
+	// Feed IPs to the workers
+	for _, ipInfo := range ipInfos {
+		ipChan <- ipInfo
+	}
+	close(ipChan)
+
+	// Wait for all workers to finish
+	wg.Wait()
 }

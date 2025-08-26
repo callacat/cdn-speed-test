@@ -10,22 +10,23 @@ import (
 	"time"
 
 	"github.com/callacat/cdn-speed-test/internal/models"
-	"github.com/schollz/progressbar/v3" // Import the progress bar package
+	"github.com/schollz/progressbar/v3"
 )
 
-// CheckConnectivityAndSpeed performs HTTP connectivity and speed tests on a single IP
-func CheckConnectivityAndSpeed(ipInfo *models.IPInfo, targetURL, speedTestURL string, timeout, speedTestTimeout time.Duration) {
-	// Create a custom transport
+// testIPConnectivityAndSpeed performs HTTP availability and speed tests for a single IP.
+// It updates the passed IPInfo struct directly.
+func testIPConnectivityAndSpeed(ipInfo *models.IPInfo, targetURL, speedTestURL string, timeout, speedTestTimeout time.Duration) {
+	// Create a custom transport that forces connections to our target IP.
 	dialer := &net.Dialer{
 		Timeout:   timeout,
 		KeepAlive: 30 * time.Second,
 	}
 	transport := &http.Transport{
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			// Force the use of the specified IP address
+			// Override the address to use our specific IP and port 443.
 			return dialer.DialContext(ctx, network, net.JoinHostPort(ipInfo.IP.String(), "443"))
 		},
-		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true}, // Skip certificate verification
+		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true}, // Ignore self-signed certs
 		ForceAttemptHTTP2:     true,
 		MaxIdleConns:          100,
 		IdleConnTimeout:       90 * time.Second,
@@ -33,12 +34,8 @@ func CheckConnectivityAndSpeed(ipInfo *models.IPInfo, targetURL, speedTestURL st
 		ExpectContinueTimeout: 1 * time.Second,
 	}
 
-	client := &http.Client{
-		Transport: transport,
-		Timeout:   timeout,
-	}
-
-	// 1. Connectivity Test
+	// 1. Availability Test
+	client := &http.Client{Transport: transport, Timeout: timeout}
 	req, err := http.NewRequest("HEAD", targetURL, nil)
 	if err != nil {
 		ipInfo.IsAvailable = false
@@ -54,13 +51,10 @@ func CheckConnectivityAndSpeed(ipInfo *models.IPInfo, targetURL, speedTestURL st
 	ipInfo.IsAvailable = true
 
 	// 2. Speed Test
-	speedClient := &http.Client{
-		Transport: transport,
-		Timeout:   speedTestTimeout,
-	}
+	speedClient := &http.Client{Transport: transport, Timeout: speedTestTimeout}
 	req, err = http.NewRequest("GET", speedTestURL, nil)
 	if err != nil {
-		return
+		return // Don't mark as unavailable, just failed the speed test
 	}
 
 	start := time.Now()
@@ -77,32 +71,35 @@ func CheckConnectivityAndSpeed(ipInfo *models.IPInfo, targetURL, speedTestURL st
 	duration := time.Since(start)
 
 	if duration.Seconds() > 0 {
-		// MB/s
+		// Calculate speed in MB/s
 		ipInfo.DownloadSpeed = (float64(bytes) / 1024 / 1024) / duration.Seconds()
 	}
 }
 
-// RunHTTPTests concurrently performs HTTP tests on a list of IPs
-// [FIX] Added 'bar *progressbar.ProgressBar' as a parameter
+// RunHTTPTests concurrently performs HTTP tests on a list of IPs.
+// This function modifies the IPInfo structs in the provided slice directly.
 func RunHTTPTests(ipInfos []*models.IPInfo, concurrency int, targetURL, speedTestURL string, timeout, speedTestTimeout time.Duration, bar *progressbar.ProgressBar) {
 	var wg sync.WaitGroup
 	ipChan := make(chan *models.IPInfo, len(ipInfos))
 
+	// Start worker goroutines
 	for i := 0; i < concurrency; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for ipInfo := range ipChan {
-				CheckConnectivityAndSpeed(ipInfo, targetURL, speedTestURL, timeout, speedTestTimeout)
-				bar.Add(1) // [FIX] Increment the progress bar
+				testIPConnectivityAndSpeed(ipInfo, targetURL, speedTestURL, timeout, speedTestTimeout)
+				bar.Add(1)
 			}
 		}()
 	}
 
+	// Feed IPs to the workers
 	for _, ipInfo := range ipInfos {
 		ipChan <- ipInfo
 	}
 	close(ipChan)
 
+	// Wait for all workers to finish
 	wg.Wait()
 }

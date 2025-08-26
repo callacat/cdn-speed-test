@@ -1,66 +1,105 @@
-package output
+package tester
 
 import (
-	"encoding/csv"
-	"fmt"
-	"os"
-	"strconv"
+	"context"
+	"crypto/tls"
+	"io"
+	"net"
+	"net/http"
+	"sync"
+	"time"
 
-	"github.com/olekukonko/tablewriter"
 	"github.com/callacat/cdn-speed-test/internal/models"
+	"github.com/schollz/progressbar/v3"
 )
 
-// RenderResults 将结果渲染到终端或CSV文件
-func RenderResults(results []*models.IPInfo, format string, csvPath string) {
-	if format == "csv" {
-		saveToCSV(results, csvPath)
-		fmt.Printf("✅ 结果已保存到 %s\n", csvPath)
-	} else {
-		renderTable(results)
+// testIPConnectivityAndSpeed performs HTTP availability and speed tests for a single IP.
+// It updates the passed IPInfo struct directly.
+func testIPConnectivityAndSpeed(ipInfo *models.IPInfo, targetURL, speedTestURL string, timeout, speedTestTimeout time.Duration) {
+	// Create a custom transport that forces connections to our target IP.
+	dialer := &net.Dialer{
+		Timeout:   timeout,
+		KeepAlive: 30 * time.Second,
 	}
-}
-
-// renderTable 在终端渲染表格
-func renderTable(results []*models.IPInfo) {
-	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"IP 地址", "平均延迟", "下载速度 (MB/s)", "丢包率"})
-	table.SetBorders(tablewriter.Border{Left: true, Top: false, Right: true, Bottom: false})
-	table.SetCenterSeparator("|")
-
-	for _, res := range results {
-		if res.IsAvailable {
-			table.Append([]string{
-				res.IP.String(),
-				fmt.Sprintf("%.2f ms", float64(res.Latency.Microseconds())/1000.0),
-				fmt.Sprintf("%.2f", res.DownloadSpeed),
-				fmt.Sprintf("%.2f%%", res.PacketLoss*100),
-			})
-		}
+	transport := &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			// Override the address to use our specific IP and port 443.
+			return dialer.DialContext(ctx, network, net.JoinHostPort(ipInfo.IP.String(), "443"))
+		},
+		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true}, // Ignore self-signed certs
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
 	}
-	table.Render()
-}
 
-// saveToCSV 将结果保存到CSV文件
-func saveToCSV(results []*models.IPInfo, path string) {
-	file, err := os.Create(path)
+	// 1. Availability Test
+	client := &http.Client{Transport: transport, Timeout: timeout}
+	req, err := http.NewRequest("HEAD", targetURL, nil)
 	if err != nil {
-		fmt.Println("❌ 创建CSV文件失败:", err)
+		ipInfo.IsAvailable = false
 		return
 	}
-	defer file.Close()
 
-	writer := csv.NewWriter(file)
-	defer writer.Flush()
-
-	writer.Write([]string{"IP Address", "Avg Latency (ms)", "Download Speed (MB/s)", "Packet Loss (%)"})
-	for _, res := range results {
-		if res.IsAvailable {
-			writer.Write([]string{
-				res.IP.String(),
-				strconv.FormatFloat(float64(res.Latency.Microseconds())/1000.0, 'f', 2, 64),
-				strconv.FormatFloat(res.DownloadSpeed, 'f', 2, 64),
-				strconv.FormatFloat(res.PacketLoss*100, 'f', 2, 64),
-			})
-		}
+	resp, err := client.Do(req)
+	if err != nil || (resp.StatusCode < 200 || resp.StatusCode >= 400) {
+		ipInfo.IsAvailable = false
+		return
 	}
+	resp.Body.Close()
+	ipInfo.IsAvailable = true
+
+	// 2. Speed Test
+	speedClient := &http.Client{Transport: transport, Timeout: speedTestTimeout}
+	req, err = http.NewRequest("GET", speedTestURL, nil)
+	if err != nil {
+		return // Don't mark as unavailable, just failed the speed test
+	}
+
+	start := time.Now()
+	speedResp, err := speedClient.Do(req)
+	if err != nil {
+		return
+	}
+	defer speedResp.Body.Close()
+
+	bytes, err := io.Copy(io.Discard, speedResp.Body)
+	if err != nil {
+		return
+	}
+	duration := time.Since(start)
+
+	if duration.Seconds() > 0 {
+		// Calculate speed in MB/s
+		ipInfo.DownloadSpeed = (float64(bytes) / 1024 / 1024) / duration.Seconds()
+	}
+}
+
+// RunHTTPTests concurrently performs HTTP tests on a list of IPs.
+// This function modifies the IPInfo structs in the provided slice directly.
+func RunHTTPTests(ipInfos []*models.IPInfo, concurrency int, targetURL, speedTestURL string, timeout, speedTestTimeout time.Duration, bar *progressbar.ProgressBar) {
+	var wg sync.WaitGroup
+	ipChan := make(chan *models.IPInfo, len(ipInfos))
+
+	// Start worker goroutines
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for ipInfo := range ipChan {
+				testIPConnectivityAndSpeed(ipInfo, targetURL, speedTestURL, timeout, speedTestTimeout)
+				bar.Add(1)
+			}
+		}()
+	}
+
+	// Feed IPs to the workers
+	for _, ipInfo := range ipInfos {
+		ipChan <- ipInfo
+	}
+	close(ipChan)
+
+	// Wait for all workers to finish
+	wg.Wait()
 }
