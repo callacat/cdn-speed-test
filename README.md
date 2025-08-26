@@ -1,2 +1,2 @@
-# edgeone-speed-test
+# cdn-speed-test
 
