@@ -17,20 +17,34 @@ jobs:
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
+      pull_request_number: ${{ steps.release.outputs.pull_request_number }}
+
     steps:
+      # 步骤 1: 生成 Release PR。
+      # 修正 1: 更新为官方推荐的 action 'googleapis/release-please-action'
+      # 修正 2: 移除不再支持的 'package-name' 参数
       - name: Generate Release PR and Version
         id: release
-        uses: google-github-actions/release-please-action@v4
+        uses: googleapis/release-please-action@v4
         with:
           release-type: go
-          package-name: cdn-speed-test
+
+      # 步骤 2: 自动合并由 release-please 创建的 PR
+      # 新增功能: 当检测到 release-please 创建了 PR 时，自动进行合并
+      - name: Auto-merge the release PR
+        if: ${{ steps.release.outputs.pull_request_number }}
+        uses: pascalgn/automerge-action@v0.15.6
+        env:
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          MERGE_METHOD: "squash" # 使用 squash 方式合并，保持提交历史整洁
+          PULL_REQUEST: "${{ steps.release.outputs.pull_request_number }}"
 
       - name: Delete workflow runs
         uses: Mattraks/delete-workflow-runs@v2
         with:
             retain_days: 0
             keep_minimum_runs: 2
-        
+
   build-and-publish:
     # 仅当 release-please 作业成功创建了一个新版本时才运行
     needs: release-please
