@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.6](https://github.com/callacat/cdn-speed-test/compare/v1.0.5...v1.0.6) (2025-08-26)
+
+
+### Bug Fixes
+
+* 修复文件命名 ([863cdfc](https://github.com/callacat/cdn-speed-test/commit/863cdfc46b3aec1389309debeced024268647486))
+
 ## [1.0.5](https://github.com/callacat/cdn-speed-test/compare/v1.0.4...v1.0.5) (2025-08-26)
 
 
