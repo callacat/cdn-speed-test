@@ -88,10 +88,10 @@ jobs:
       - name: Build binaries for different platforms
         run: |
           mkdir -p release
-          GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o release/cdn-speed-test-linux-amd64 ./cmd/cdn-speed-test
-          GOOS=windows GOARCH=amd64 go build -ldflags="-w -s" -o release/cdn-speed-test-windows-amd64.exe ./cmd/cdn-speed-test
-          GOOS=darwin GOARCH=amd64 go build -ldflags="-w -s" -o release/cdn-speed-test-darwin-amd64 ./cmd/cdn-speed-test
-          GOOS=darwin GOARCH=arm64 go build -ldflags="-w -s" -o release/cdn-speed-test-darwin-arm64 ./cmd/cdn-speed-test
+          GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o release/cdn-speed-test-linux-amd64 ./cmd
+          GOOS=windows GOARCH=amd64 go build -ldflags="-w -s" -o release/cdn-speed-test-windows-amd64.exe ./cmd
+          GOOS=darwin GOARCH=amd64 go build -ldflags="-w -s" -o release/cdn-speed-test-darwin-amd64 ./cmd
+          GOOS=darwin GOARCH=arm64 go build -ldflags="-w -s" -o release/cdn-speed-test-darwin-arm64 ./cmd
 
       - name: Upload Assets to Release
         uses: softprops/action-gh-release@v2
