@@ -11,6 +11,10 @@ on:
 #   pull-requests: write
 #   actions: write
 
+# .github/workflows/release.yml
+
+# ... (前面的内容保持不变)
+
 jobs:
   release-please:
     runs-on: ubuntu-latest
@@ -18,28 +22,29 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
       pull_request_number: ${{ steps.release.outputs.pull_request_number }}
+
     steps:
       # Step 1: Generate the Release PR.
+      # [FIX] Use the Personal Access Token (PAT) for authentication
       - name: Generate Release PR and Version
         id: release
         uses: googleapis/release-please-action@v4
         with:
+          token: ${{ secrets.RELEASE_PLEASE_PAT }} # <-- 修改这里
           release-type: go
 
       # Step 2: Use a dedicated action to auto-merge the PR.
+      # [FIX] Also use the PAT here to ensure merge permissions
       - name: Merge the release PR
         if: ${{ steps.release.outputs.pull_request_number }}
         uses: pascalgn/automerge-action@v0.15.6
         env:
-          # For repositories with branch protection, you may need to create a
-          # Personal Access Token (PAT) with 'repo' scope and use that instead.
-          # Example: GITHUB_TOKEN: "${{ secrets.YOUR_PAT_SECRET }}"
-          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          GITHUB_TOKEN: "${{ secrets.RELEASE_PLEASE_PAT }}" # <-- 同时修改这里
           MERGE_METHOD: "squash"
           PULL_REQUEST: "${{ steps.release.outputs.pull_request_number }}"
-          # Removes all labels before merging.
           MERGE_LABELS: ""
 
+# ... (后面的内容保持不变)
       - name: Delete workflow runs
         uses: Mattraks/delete-workflow-runs@v2
         with:
