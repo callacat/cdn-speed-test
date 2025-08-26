@@ -6,15 +6,16 @@ import (
 	"time"
 
 	"github.com/callacat/cdn-speed-test/internal/models"
+	"github.com/schollz/progressbar/v3" // Import the progress bar package
 )
 
-// PingResult 包含单次ping的结果
+// PingResult contains the result of a single ping
 type PingResult struct {
 	Latency time.Duration
 	Success bool
 }
 
-// TCPPing 对单个IP进行多次TCP Ping测试
+// TCPPing performs multiple TCP Pings on a single IP
 func TCPPing(ip net.IP, retries int, timeout time.Duration) (time.Duration, float64) {
 	var totalLatency time.Duration
 	successCount := 0
@@ -57,8 +58,9 @@ func TCPPing(ip net.IP, retries int, timeout time.Duration) (time.Duration, floa
 	return avgLatency, packetLoss
 }
 
-// RunTCPPingTests 并发对所有IP进行TCP Ping测试
-func RunTCPPingTests(ips []net.IP, concurrency int, retries int, timeout time.Duration, latencyMax int) []*models.IPInfo {
+// RunTCPPingTests concurrently performs TCP Ping tests on all IPs
+// [FIX] Added 'bar *progressbar.ProgressBar' as a parameter
+func RunTCPPingTests(ips []net.IP, concurrency int, retries int, timeout time.Duration, latencyMax int, bar *progressbar.ProgressBar) []*models.IPInfo {
 	var wg sync.WaitGroup
 	ipChan := make(chan net.IP, len(ips))
 	results := make(chan *models.IPInfo, len(ips))
@@ -76,6 +78,7 @@ func RunTCPPingTests(ips []net.IP, concurrency int, retries int, timeout time.Du
 						PacketLoss: packetLoss,
 					}
 				}
+				bar.Add(1) // [FIX] Increment the progress bar
 			}
 		}()
 	}

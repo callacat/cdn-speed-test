@@ -3,7 +3,6 @@ package tester
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -11,21 +10,22 @@ import (
 	"time"
 
 	"github.com/callacat/cdn-speed-test/internal/models"
+	"github.com/schollz/progressbar/v3" // Import the progress bar package
 )
 
-// CheckConnectivityAndSpeed 对单个IP进行HTTP连通性和速度测试
+// CheckConnectivityAndSpeed performs HTTP connectivity and speed tests on a single IP
 func CheckConnectivityAndSpeed(ipInfo *models.IPInfo, targetURL, speedTestURL string, timeout, speedTestTimeout time.Duration) {
-	// 创建自定义Transport
+	// Create a custom transport
 	dialer := &net.Dialer{
 		Timeout:   timeout,
 		KeepAlive: 30 * time.Second,
 	}
 	transport := &http.Transport{
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			// 强制使用指定的IP地址
+			// Force the use of the specified IP address
 			return dialer.DialContext(ctx, network, net.JoinHostPort(ipInfo.IP.String(), "443"))
 		},
-		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true}, // 忽略证书验证
+		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true}, // Skip certificate verification
 		ForceAttemptHTTP2:     true,
 		MaxIdleConns:          100,
 		IdleConnTimeout:       90 * time.Second,
@@ -38,7 +38,7 @@ func CheckConnectivityAndSpeed(ipInfo *models.IPInfo, targetURL, speedTestURL st
 		Timeout:   timeout,
 	}
 
-	// 1. 连通性测试
+	// 1. Connectivity Test
 	req, err := http.NewRequest("HEAD", targetURL, nil)
 	if err != nil {
 		ipInfo.IsAvailable = false
@@ -53,7 +53,7 @@ func CheckConnectivityAndSpeed(ipInfo *models.IPInfo, targetURL, speedTestURL st
 	resp.Body.Close()
 	ipInfo.IsAvailable = true
 
-	// 2. 速度测试
+	// 2. Speed Test
 	speedClient := &http.Client{
 		Transport: transport,
 		Timeout:   speedTestTimeout,
@@ -82,8 +82,9 @@ func CheckConnectivityAndSpeed(ipInfo *models.IPInfo, targetURL, speedTestURL st
 	}
 }
 
-// RunHTTPTests 并发对IP列表进行HTTP测试
-func RunHTTPTests(ipInfos []*models.IPInfo, concurrency int, targetURL, speedTestURL string, timeout, speedTestTimeout time.Duration) {
+// RunHTTPTests concurrently performs HTTP tests on a list of IPs
+// [FIX] Added 'bar *progressbar.ProgressBar' as a parameter
+func RunHTTPTests(ipInfos []*models.IPInfo, concurrency int, targetURL, speedTestURL string, timeout, speedTestTimeout time.Duration, bar *progressbar.ProgressBar) {
 	var wg sync.WaitGroup
 	ipChan := make(chan *models.IPInfo, len(ipInfos))
 
@@ -93,6 +94,7 @@ func RunHTTPTests(ipInfos []*models.IPInfo, concurrency int, targetURL, speedTes
 			defer wg.Done()
 			for ipInfo := range ipChan {
 				CheckConnectivityAndSpeed(ipInfo, targetURL, speedTestURL, timeout, speedTestTimeout)
+				bar.Add(1) // [FIX] Increment the progress bar
 			}
 		}()
 	}
