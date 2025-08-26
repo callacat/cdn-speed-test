@@ -21,8 +21,6 @@ jobs:
 
     steps:
       # 步骤 1: 生成 Release PR。
-      # 修正 1: 更新为官方推荐的 action 'googleapis/release-please-action'
-      # 修正 2: 移除不再支持的 'package-name' 参数
       - name: Generate Release PR and Version
         id: release
         uses: googleapis/release-please-action@v4
@@ -30,7 +28,6 @@ jobs:
           release-type: go
 
       # 步骤 2: 自动合并由 release-please 创建的 PR
-      # 新增功能: 当检测到 release-please 创建了 PR 时，自动进行合并
       - name: Auto-merge the release PR
         if: ${{ steps.release.outputs.pull_request_number }}
         uses: pascalgn/automerge-action@v0.15.6
@@ -62,6 +59,10 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.21'
+
+      # 新增步骤: 运行 go mod tidy 来确保 go.sum 文件存在且是最新
+      - name: Tidy Go Modules
+        run: go mod tidy
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
