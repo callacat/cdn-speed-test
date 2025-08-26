@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/callacat/cdn-speed-test/compare/v1.1.0...v1.1.1) (2025-08-26)
+
+
+### Bug Fixes
+
+* Dockerfile ([3a7cd64](https://github.com/callacat/cdn-speed-test/commit/3a7cd64daa7491bbfaddc29a328c3babfd0c9058))
+
 ## [1.1.0](https://github.com/callacat/cdn-speed-test/compare/v1.0.7...v1.1.0) (2025-08-26)
 
 
