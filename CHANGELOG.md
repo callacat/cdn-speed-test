@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.7](https://github.com/callacat/cdn-speed-test/compare/v1.0.6...v1.0.7) (2025-08-26)
+
+
+### Bug Fixes
+
+* 修复函数调用与其定义不匹配 ([4a85dae](https://github.com/callacat/cdn-speed-test/commit/4a85dae498a0368e4cec265988442c8da34f2abd))
+
 ## [1.0.6](https://github.com/callacat/cdn-speed-test/compare/v1.0.5...v1.0.6) (2025-08-26)
 
 
