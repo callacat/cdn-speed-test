@@ -12,37 +12,39 @@ permissions:
   actions: write
 
 jobs:
-  release-please:
+  release:
+    name: Create Release
     runs-on: ubuntu-latest
     outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
-      pull_request_number: ${{ steps.release.outputs.pull_request_number }}
+      # [CORE FIX 2] Ensure the correct output variable name is used
+      new_release_published: ${{ steps.release.outputs.release_created }}
+      new_release_version: ${{ steps.release.outputs.version }}
+      new_release_tag: ${{ steps.release.outputs.tag_name }}
 
     steps:
-      # Step 1: Generate the Release PR.
-      - name: Generate Release PR and Version
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Automatic Versioning and Release Creation
         id: release
+        # [FIX] Use the new, non-deprecated action name
         uses: googleapis/release-please-action@v4
         with:
           release-type: go
+          # [FIX] Removed the unsupported 'package-name' input
 
-      # Step 2: Use a dedicated action to auto-merge the PR.
-      # This is more reliable than using the gh CLI with the default token.
-      - name: Merge the release PR
+      # [NEW] Auto-merge the release PR created by Release Please
+      - name: Auto-merge the release PR
         if: ${{ steps.release.outputs.pull_request_number }}
         uses: pascalgn/automerge-action@v0.15.6
         env:
-          # For repositories with branch protection, you may need to create a
-          # Personal Access Token (PAT) with 'repo' scope and use that instead.
-          # Example: GITHUB_TOKEN: "${{ secrets.YOUR_PAT_SECRET }}"
           GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          MERGE_LABELS: ""
           MERGE_METHOD: "squash"
           PULL_REQUEST: "${{ steps.release.outputs.pull_request_number }}"
-          # Removes all labels before merging. This can help bypass
-          # label-based branch protection rules if any exist.
-          MERGE_LABELS: ""
-
+          
       - name: Delete workflow runs
         uses: Mattraks/delete-workflow-runs@v2
         with:
