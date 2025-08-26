@@ -3,63 +3,57 @@ name: Automatic Release and Publish
 on:
   push:
     branches:
-      - 'main' # 当推送到 main 分支时触发
+      - 'main' # Trigger on push to the main branch
 
-# 为工作流授予创建 PR 和 Release 的权限
+# Grant permissions for creating PRs and Releases
 permissions:
   contents: write
   pull-requests: write
   actions: write
 
 jobs:
-  release:
-    name: Create Release
+  release-please:
     runs-on: ubuntu-latest
     outputs:
-      # [CORE FIX 2] Ensure the correct output variable name is used
-      new_release_published: ${{ steps.release.outputs.release_created }}
-      new_release_version: ${{ steps.release.outputs.version }}
-      new_release_tag: ${{ steps.release.outputs.tag_name }}
-
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      pull_request_number: ${{ steps.release.outputs.pull_request_number }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Automatic Versioning and Release Creation
+      # Step 1: Generate the Release PR.
+      - name: Generate Release PR and Version
         id: release
-        # [FIX] Use the new, non-deprecated action name
         uses: googleapis/release-please-action@v4
         with:
           release-type: go
-          # [FIX] Removed the unsupported 'package-name' input
 
-      # [NEW] Auto-merge the release PR created by Release Please
-      - name: Auto-merge the release PR
+      # Step 2: Use a dedicated action to auto-merge the PR.
+      - name: Merge the release PR
         if: ${{ steps.release.outputs.pull_request_number }}
         uses: pascalgn/automerge-action@v0.15.6
         env:
+          # For repositories with branch protection, you may need to create a
+          # Personal Access Token (PAT) with 'repo' scope and use that instead.
+          # Example: GITHUB_TOKEN: "${{ secrets.YOUR_PAT_SECRET }}"
           GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-          MERGE_LABELS: ""
           MERGE_METHOD: "squash"
           PULL_REQUEST: "${{ steps.release.outputs.pull_request_number }}"
-          
+          # Removes all labels before merging.
+          MERGE_LABELS: ""
+
       - name: Delete workflow runs
         uses: Mattraks/delete-workflow-runs@v2
         with:
             retain_days: 0
-            keep_minimum_runs: 2  
-        
+            keep_minimum_runs: 2
+
   build-and-publish:
-    # 仅当 release-please 作业成功创建了一个新版本时才运行
+    # Only run if the release-please job created a new release
     needs: release-please
-    if: needs.release-please.outputs.release_created
+    if: needs.release-please.outputs.release_created == 'true'
     runs-on: ubuntu-latest
     permissions:
-      contents: write # 需要权限来上传资产到Release
-      packages: write # 需要权限来推送到Docker Hub
-
+      contents: write # Needed to upload assets to the Release
+      packages: write # Needed to push to Docker Hub
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -69,7 +63,7 @@ jobs:
         with:
           go-version: '1.21'
 
-      # 运行 go mod tidy 来确保 go.sum 文件存在且是最新
+      # Run go mod tidy to ensure go.sum is up to date
       - name: Tidy Go Modules
         run: go mod tidy
 
@@ -90,7 +84,7 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ secrets.DOCKERHUB_USERNAME }}/cdn-speed-test
-          # 这个 action 会自动使用 release-please 创建的 git 标签
+          # This action automatically uses the git tag from release-please
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -107,7 +101,7 @@ jobs:
 
       - name: Build binaries for different platforms
         run: |
-          mkdir -p release # 创建用于存放二进制文件的目录
+          mkdir -p release # Create directory for binaries
           GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o release/cdn-speed-test-linux-amd64 ./cmd/cdn-speed-test
           GOOS=windows GOARCH=amd64 go build -ldflags="-w -s" -o release/cdn-speed-test-windows-amd64.exe ./cmd/cdn-speed-test
           GOOS=darwin GOARCH=amd64 go build -ldflags="-w -s" -o release/cdn-speed-test-darwin-amd64 ./cmd/cdn-speed-test
@@ -116,7 +110,6 @@ jobs:
       - name: Upload Assets to Release
         uses: softprops/action-gh-release@v2
         with:
-          # 使用 release-please 创建的标签名来定位到正确的 Release
+          # Use the tag_name from the release-please job to find the correct release
           tag_name: ${{ needs.release-please.outputs.tag_name }}
           files: release/*
-          # Release 的标题和内容由 release-please 自动生成，这里只需上传文件即可
