@@ -13,6 +13,11 @@ RUN go mod download
 # Copy the rest of your source code into the container.
 COPY . .
 
+# --- DEBUGGING STEP ---
+# List all files and directories recursively to verify the copy operation.
+# Check the build output for this step to see if the 'cmd' directory exists.
+RUN ls -R
+
 # Build the Go application.
 # CGO_ENABLED=0 creates a static binary without C dependencies.
 # -ldflags="-w -s" strips debug information, reducing the binary size.
