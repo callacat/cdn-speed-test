@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/callacat/cdn-speed-test/compare/v1.0.0...v1.0.1) (2025-08-26)
+
+
+### Bug Fixes
+
+* 自动生成go.sum ([95b476e](https://github.com/callacat/cdn-speed-test/commit/95b476e0f4100db7d8970d6a9e8a3308810d989e))
+
 ## 1.0.0 (2025-08-26)
 
 
