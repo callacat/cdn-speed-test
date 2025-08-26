@@ -6,10 +6,10 @@ on:
       - 'main' # Trigger on push to the main branch
 
 # Grant permissions for creating PRs and Releases
-permissions:
-  contents: write
-  pull-requests: write
-  actions: write
+# permissions:
+#   contents: write
+#   pull-requests: write
+#   actions: write
 
 jobs:
   release-please:
